@@ -1,24 +1,35 @@
 /**
  * 新电信抢话费 - 完全版 (Quantumult X)
- * 作者: quanhaipeng 定制
+ * 作者: 定制
  * 功能: 自动登录 -> 获取 ticket -> 调用瑞数接口 -> 抢话费
- * 
  * cron: 57 9,13,23 * * *
- * 环境变量:
+ * BoxJS 环境变量:
  *   chinaTelecomAccount = 手机号#密码&手机号#密码
  *   reqNUM = 抢购请求次数 (默认 1)
  */
 
 const $ = new Env("新电信抢话费");
 
-// =============== 配置区域 =================
-const ACCOUNTS = $.getdata("chinaTelecomAccount") || "";  // 手机号#密码 多账号用 & 分割
-const RUN_NUM = $.getdata("reqNUM") || 1;                 // 每个账号重复请求次数
-// =========================================
+// =============== BoxJS 配置区域 =================
+function Box() {
+  return new (class {
+    read(key) {
+      return $prefs.valueForKey(key);
+    }
+    write(val, key) {
+      return $prefs.setValueForKey(val, key);
+    }
+  })();
+}
+const $box = new Box();
+
+const ACCOUNTS = $box.read("chinaTelecomAccount") || "";
+const RUN_NUM = parseInt($box.read("reqNUM") || "1");
+// =================================================
 
 async function main() {
   if (!ACCOUNTS) {
-    $.msg("新电信抢话费", "未配置账号", "请在 QX 环境变量里设置 chinaTelecomAccount");
+    $.msg("新电信抢话费", "未配置账号", "请在 BoxJS 中设置变量 chinaTelecomAccount");
     return;
   }
 
@@ -35,13 +46,11 @@ async function main() {
     }
     console.log(`[${phone}] 登录成功，ticket=${ticket}`);
 
-    // 瑞数通杀 (必须调用一次才行)
     await getRuishuCookie();
 
-    // 抢话费
     for (let i = 0; i < RUN_NUM; i++) {
       await exchange(phone, ticket);
-      await $.wait(500); // 避免过快
+      await $.wait(500);
     }
   }
 }
@@ -67,7 +76,7 @@ async function login(phone, password) {
   }
 }
 
-// 瑞数 Cookie (模仿 Python 中的调用)
+// 瑞数 Cookie
 async function getRuishuCookie() {
   const url = "https://wappark.189.cn:8043/ruiShuTongSha.js";
   try {
@@ -109,11 +118,16 @@ function Env(name) {
     post(url, data) { return this.request("POST", url, data) }
     request(method, url, data) {
       return new Promise((resolve, reject) => {
-        $task.fetch({ method, url, body: data ? JSON.stringify(data) : null, headers: { "Content-Type": "application/json" } })
-          .then(resp => {
-            try { resolve(JSON.parse(resp.body)) } catch { resolve(resp.body) }
-          })
-          .catch(reject);
+        $task.fetch({
+          method,
+          url,
+          body: data ? JSON.stringify(data) : null,
+          headers: { "Content-Type": "application/json" }
+        })
+        .then(resp => {
+          try { resolve(JSON.parse(resp.body)) } catch { resolve(resp.body) }
+        })
+        .catch(reject);
       });
     }
   })(name);
